@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const AUTH_PAGES = ["/login", "/signup"];
+const PUBLIC_PAGES = ["/login", "/signup", "/privacy", "/terms"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -12,7 +13,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Unauthenticated user hitting protected pages → redirect to login
-  if (!hasSession && !AUTH_PAGES.some((p) => pathname.startsWith(p))) {
+  if (!hasSession && !PUBLIC_PAGES.some((p) => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
