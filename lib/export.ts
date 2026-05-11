@@ -1,8 +1,7 @@
 import * as XLSX from "xlsx";
 import type { Visit, EnrichedBusiness } from "@/lib/data";
-import { isDM, isSale } from "@/lib/data";
+import type { OutcomeMap } from "@/lib/data";
 
-type OutcomeMap = Record<string, { label: string; dm: boolean; sale: boolean; tone: string }>;
 type ServiceMap = Record<string, { label: string }>;
 
 interface ExportData {
@@ -105,9 +104,9 @@ function buildWeekSheetAoa(
     }
     // Tracking columns (mostly empty, populate what we can)
     const totalItemsForBiz = v.items.length;
-    const hasSale = v.items.some((it) => isSale(it.out));
-    const hasQuote = v.items.some((it) => ["IMPQ", "MAPQ"].includes(it.out));
-    const hasReferral = v.items.some((it) => it.out === "R");
+    const hasSale = v.items.some((it) => isSaleCode(it.out, outcomes));
+    const hasQuote = v.items.some((it) => outcomes[it.out]?.label?.toLowerCase().includes("quote"));
+    const hasReferral = v.items.some((it) => outcomes[it.out]?.tone === "orange");
 
     row.push(totalItemsForBiz);          // No of contacts
     row.push(totalItemsForBiz > 0 ? "Y" : ""); // Pitch completed
@@ -140,7 +139,7 @@ function buildWeekSheetAoa(
     const dmSpoken = svcItems.filter((it) => isDMCode(it.out, outcomes)).length;
     const salesCount = svcItems.filter((it) => isSaleCode(it.out, outcomes)).length;
     const conv = dmSpoken > 0 ? Math.round((salesCount / dmSpoken) * 100) : 0;
-    const referrals = svcItems.filter((it) => it.out === "R").length;
+    const referrals = svcItems.filter((it) => outcomes[it.out]?.tone === "orange").length;
 
     // Ensure rows exist
     const ensureRow = (idx: number) => {
@@ -153,12 +152,12 @@ function buildWeekSheetAoa(
     rows[summaryRow].push("SERVICE:", "Outcome", "Outcome Total", "Total No of contacts + visits", "DMs spoken to", "Pitch to conversion", "No of referrals");
     summaryRow++;
 
-    // Service name + CB row
+    // Service name + first outcome row
     ensureRow(summaryRow);
     rows[summaryRow].push(
       services[svcCode]?.label || svcCode,
-      "CB",
-      svcItems.filter((it) => it.out === "CB").length,
+      outCodes[0],
+      svcItems.filter((it) => it.out === outCodes[0]).length,
       totalContacts,
       dmSpoken,
       conv ? `${conv}%` : "0%",
@@ -166,9 +165,9 @@ function buildWeekSheetAoa(
     );
     summaryRow++;
 
-    // Remaining outcome rows (skip CB since it's in the first row)
+    // Remaining outcome rows (skip first since it's in the header row)
     for (const outCode of outCodes) {
-      if (outCode === "CB") continue;
+      if (outCode === outCodes[0]) continue;
       const count = svcItems.filter((it) => it.out === outCode).length;
       ensureRow(summaryRow);
       rows[summaryRow].push("", outCode, count, null, null, null, null);
@@ -192,14 +191,13 @@ function buildLegendSheet(outcomes: OutcomeMap) {
   for (const [code, info] of Object.entries(outcomes)) {
     let when = "";
     if (info.sale) when = "Closed the sale on the spot or at a meeting";
-    else if (info.dm && code.includes("M")) when = "Met with decision maker, discussed services";
-    else if (info.dm && code.includes("Q")) when = "Met with DM, sent a quote";
-    else if (code === "CB") when = "DM not available, call/visit back later";
-    else if (code === "NI") when = "DM said no thanks";
-    else if (code === "R") when = "Got a referral to another business";
-    else if (code === "NDM") when = "Visited but no decision maker present";
-    else if (code === "BC") when = "Business was temporarily closed";
-    else if (code === "BCD") when = "Business has permanently closed down";
+    else if (info.dm && info.label.toLowerCase().includes("quote")) when = "Met with DM, sent a quote";
+    else if (info.dm && info.tone === "danger") when = "DM said no thanks";
+    else if (info.dm && info.tone === "orange") when = "Got a referral to another business";
+    else if (info.dm) when = "Met with decision maker, discussed services";
+    else if (info.tone === "warning") when = "DM not available, call/visit back later";
+    else if (info.tone === "muted" && info.label.toLowerCase().includes("decision")) when = "Visited but no decision maker present";
+    else if (info.tone === "muted") when = "Business closed or unavailable";
     else when = info.label;
 
     rows.push([code, info.label, when, "", info.dm ? "Yes" : "No", info.sale ? "Yes" : "No"]);
@@ -399,8 +397,8 @@ export function buildSalesTrackerWorkbook(data: ExportData): XLSX.WorkBook {
   if (effectiveOpts.perSvc) {
     const svcRows = Object.entries(services).map(([code, info]) => {
       const svcItems = items.filter((it) => it.svc === code);
-      const dm = svcItems.filter((it) => isDM(it.out)).length;
-      const sales = svcItems.filter((it) => isSale(it.out)).length;
+      const dm = svcItems.filter((it) => isDMCode(it.out, outcomes)).length;
+      const sales = svcItems.filter((it) => isSaleCode(it.out, outcomes)).length;
       return {
         Service: code,
         "Service Name": info.label,
@@ -418,8 +416,8 @@ export function buildSalesTrackerWorkbook(data: ExportData): XLSX.WorkBook {
   if (effectiveOpts.perArea) {
     const areaRows = areas.map((a) => {
       const areaItems = items.filter((it) => businessesById[it.bizId]?.area === a);
-      const dm = areaItems.filter((it) => isDM(it.out)).length;
-      const sales = areaItems.filter((it) => isSale(it.out)).length;
+      const dm = areaItems.filter((it) => isDMCode(it.out, outcomes)).length;
+      const sales = areaItems.filter((it) => isSaleCode(it.out, outcomes)).length;
       return {
         Area: a,
         Contacts: areaItems.length,

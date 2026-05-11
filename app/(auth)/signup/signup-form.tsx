@@ -66,6 +66,31 @@ export function SignupForm() {
             )}
           </div>
 
+          <div>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                name="agreedToTerms"
+                style={{ marginTop: 2 }}
+              />
+              <span style={{ color: "var(--text-2)" }}>
+                I agree to the{" "}
+                <a href="/terms" style={{ color: "var(--accent)", fontWeight: 500 }}>
+                  Terms of Use
+                </a>{" "}
+                and{" "}
+                <a href="/privacy" style={{ color: "var(--accent)", fontWeight: 500 }}>
+                  Privacy Policy
+                </a>
+              </span>
+            </label>
+            {state?.errors?.agreedToTerms && (
+              <p style={{ fontSize: 12, color: "var(--danger)", marginTop: 4 }}>
+                {state.errors.agreedToTerms[0]}
+              </p>
+            )}
+          </div>
+
           {state?.error && (
             <p style={{ fontSize: 13, color: "var(--danger)", padding: "8px 12px", background: "var(--danger-bg)", borderRadius: 6 }}>
               {state.error}

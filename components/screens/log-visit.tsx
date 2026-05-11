@@ -32,8 +32,10 @@ interface Extraction {
   items: { svc: string; out: string }[];
 }
 
-function tryExtract(text: string, businesses: { name: string; area: string; contact: string; role: string }[], areas: string[], services: Record<string, { label: string }>, outcomes: Record<string, { label: string }>): Extraction | null {
+function tryExtract(text: string, businesses: { name: string; area: string; contact: string; role: string }[], areas: string[], services: Record<string, { label: string }>, outcomes: OutcomeMap): Extraction | null {
   const lc = text.toLowerCase();
+  const outKeys = Object.keys(outcomes);
+  const defaultOut = outKeys.find((c) => outcomes[c]?.tone === "warning") || outKeys[0] || "";
   // Try to match a business
   let matchedBiz: typeof businesses[0] | null = null;
   for (const b of businesses) {
@@ -52,19 +54,28 @@ function tryExtract(text: string, businesses: { name: string; area: string; cont
     }
   }
   // Match outcomes
-  let matchedOut = "CB";
-  for (const code of Object.keys(outcomes)) {
+  let matchedOut = defaultOut;
+  for (const code of outKeys) {
     if (lc.includes(code.toLowerCase())) { matchedOut = code; break; }
   }
-  // Check for sale keywords
-  if (lc.includes("sold") || lc.includes("sale") || lc.includes("deposit")) matchedOut = "IS";
-  else if (lc.includes("not interested") || lc.includes("no thanks")) matchedOut = "NI";
-  else if (lc.includes("booked") || lc.includes("meeting") || lc.includes("appointment")) matchedOut = "MA";
-  else if (lc.includes("quote")) matchedOut = "IMPQ";
-  else if (lc.includes("callback") || lc.includes("call back") || lc.includes("try again")) matchedOut = "CB";
-  else if (lc.includes("referral") || lc.includes("referred")) matchedOut = "R";
-  else if (lc.includes("closed")) matchedOut = "BC";
-  else if (lc.includes("no decision maker") || lc.includes("ndm")) matchedOut = "NDM";
+  // Check for sale keywords — dynamic lookups by outcome properties
+  const saleOut = outKeys.find((c) => outcomes[c]?.sale) || matchedOut;
+  const niOut = outKeys.find((c) => outcomes[c]?.tone === "danger" && outcomes[c]?.dm) || matchedOut;
+  const meetingOut = outKeys.find((c) => outcomes[c]?.dm && outcomes[c]?.tone === "purple") || matchedOut;
+  const quoteOut = outKeys.find((c) => outcomes[c]?.label?.toLowerCase().includes("quote")) || matchedOut;
+  const cbOut = outKeys.find((c) => outcomes[c]?.tone === "warning") || matchedOut;
+  const referralOut = outKeys.find((c) => outcomes[c]?.tone === "orange") || matchedOut;
+  const closedOut = outKeys.find((c) => outcomes[c]?.tone === "muted" && !outcomes[c]?.dm) || matchedOut;
+  const ndmOut = outKeys.find((c) => outcomes[c]?.label?.toLowerCase().includes("decision")) || matchedOut;
+
+  if (lc.includes("sold") || lc.includes("sale") || lc.includes("deposit")) matchedOut = saleOut;
+  else if (lc.includes("not interested") || lc.includes("no thanks")) matchedOut = niOut;
+  else if (lc.includes("booked") || lc.includes("meeting") || lc.includes("appointment")) matchedOut = meetingOut;
+  else if (lc.includes("quote")) matchedOut = quoteOut;
+  else if (lc.includes("callback") || lc.includes("call back") || lc.includes("try again")) matchedOut = cbOut;
+  else if (lc.includes("referral") || lc.includes("referred")) matchedOut = referralOut;
+  else if (lc.includes("closed")) matchedOut = closedOut;
+  else if (lc.includes("no decision maker") || lc.includes("ndm")) matchedOut = ndmOut;
 
   const items = matchedSvcs.length > 0
     ? matchedSvcs.map((s) => ({ svc: s, out: matchedOut }))
@@ -81,6 +92,28 @@ function tryExtract(text: string, businesses: { name: string; area: string; cont
     followUp: "",
     items,
   };
+}
+
+async function callExtractAPI(
+  text: string,
+  businesses: { name: string; area: string; contact: string; role: string }[],
+  services: Record<string, { label: string }>,
+  outcomes: OutcomeMap,
+  areas: string[],
+): Promise<Extraction | null> {
+  try {
+    const res = await fetch("/api/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, businesses, services, outcomes, areas }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.business && data.items) return data as Extraction;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function LogVisitScreen() {
@@ -106,16 +139,29 @@ export function LogVisitScreen() {
 
   React.useEffect(() => {
     if (state !== "extracting") return;
+    let cancelled = false;
     const sourceText = speech.transcript || textInput;
     const bizList = Object.values(businessesById).map((b) => ({
       name: b.name, area: b.area, contact: b.contact, role: b.role,
     }));
-    const t = setTimeout(() => {
+
+    (async () => {
+      // Try real AI extraction first
+      const aiResult = await callExtractAPI(sourceText, bizList, services, outcomes, areas);
+      if (cancelled) return;
+      if (aiResult) {
+        setExtraction(aiResult);
+        setState("review");
+        return;
+      }
+      // Fall back to regex extraction
       const extracted = tryExtract(sourceText, bizList, areas, services, outcomes);
+      if (cancelled) return;
       setExtraction(extracted || { ...DEMO_EXTRACTION });
       setState("review");
-    }, 1200);
-    return () => clearTimeout(t);
+    })();
+
+    return () => { cancelled = true; };
   }, [state]);
 
   const startRecording = () => {
@@ -149,7 +195,8 @@ export function LogVisitScreen() {
     items: e.items.map((it, i) => i === idx ? { ...it, ...patch } : it),
   }) : e);
   const removeItem = (idx: number) => setExtraction((e) => e ? ({ ...e, items: e.items.filter((_, i) => i !== idx) }) : e);
-  const addItem    = () => setExtraction((e) => e ? ({ ...e, items: [...e.items, { svc: Object.keys(services)[0] || "GBPO", out: "CB" }] }) : e);
+  const addItemDefaultOut = Object.keys(outcomes).find((c) => outcomes[c]?.tone === "warning") || Object.keys(outcomes)[0] || "";
+  const addItem    = () => setExtraction((e) => e ? ({ ...e, items: [...e.items, { svc: Object.keys(services)[0] || "GBPO", out: addItemDefaultOut }] }) : e);
 
   const save = () => {
     if (!extraction) return;

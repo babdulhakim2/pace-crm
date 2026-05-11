@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { usePace } from "@/lib/store";
-import { formatAgo, shortDate, isSale } from "@/lib/data";
+import { formatAgo, shortDate, isSale, type OutcomeMap } from "@/lib/data";
 import { SvcOutcomePill, StageTag, Stat, STAGE_META } from "@/components/ui";
 import { QuickAdd } from "@/components/quick-add";
 import { ScheduleCall } from "@/components/schedule-call";
@@ -158,10 +158,10 @@ export function BusinessModal({ bizId, onClose }: { bizId: string | null; onClos
               {biz.visits.map((v) => {
                 const dotTone = (() => {
                   const items = v.items;
-                  if (items.some((it) => isSale(it.out))) return "success";
-                  if (items.some((it) => ["MA","IM","MAPQ","IMPQ"].includes(it.out))) return "accent";
-                  if (items.some((it) => it.out === "NI")) return "danger";
-                  if (items.some((it) => it.out === "CB")) return "warning";
+                  if (items.some((it) => isSale(it.out, outcomes))) return "success";
+                  if (items.some((it) => outcomes[it.out]?.dm && (outcomes[it.out]?.tone === "accent" || outcomes[it.out]?.tone === "purple"))) return "accent";
+                  if (items.some((it) => outcomes[it.out]?.tone === "danger")) return "danger";
+                  if (items.some((it) => outcomes[it.out]?.tone === "warning")) return "warning";
                   return "";
                 })();
                 return (

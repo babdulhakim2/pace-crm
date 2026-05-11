@@ -40,7 +40,7 @@ export function BusinessListScreen() {
       const dmBizIds = new Set<string>();
       visits.forEach((v) => {
         if (new Date(v.date) >= weekAgo) {
-          v.items.forEach((it) => { if (isDM(it.out)) dmBizIds.add(v.bizId); });
+          v.items.forEach((it) => { if (isDM(it.out, outcomes)) dmBizIds.add(v.bizId); });
         }
       });
       list = list.filter((b) => dmBizIds.has(b.id));
@@ -48,7 +48,7 @@ export function BusinessListScreen() {
       const saleBizIds = new Set<string>();
       visits.forEach((v) => {
         if (new Date(v.date) >= weekAgo) {
-          v.items.forEach((it) => { if (isSale(it.out)) saleBizIds.add(v.bizId); });
+          v.items.forEach((it) => { if (isSale(it.out, outcomes)) saleBizIds.add(v.bizId); });
         }
       });
       list = list.filter((b) => saleBizIds.has(b.id));
@@ -57,7 +57,7 @@ export function BusinessListScreen() {
       visits.forEach((v) => {
         const age = now.getTime() - new Date(v.date).getTime();
         if (age < 14 * 86400000) {
-          v.items.forEach((it) => { if (it.out === "CB") cbBizIds.add(v.bizId); });
+          v.items.forEach((it) => { if (outcomes[it.out]?.tone === "warning") cbBizIds.add(v.bizId); });
         }
       });
       list = list.filter((b) => cbBizIds.has(b.id));

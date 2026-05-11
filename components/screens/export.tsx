@@ -1,7 +1,6 @@
 "use client";
 import React from "react";
 import { usePace } from "@/lib/store";
-import { isDM, isSale, shortDate } from "@/lib/data";
 import { IconTrail, IconBuilding, IconChartBar, IconLocation, IconCalendar, IconSheet, IconCsv, IconCheck } from "@/components/icons";
 import { buildSalesTrackerWorkbook } from "@/lib/export";
 import * as XLSX from "xlsx";

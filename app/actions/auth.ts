@@ -21,6 +21,7 @@ export async function signup(
     name: formData.get("name"),
     email: formData.get("email"),
     password: formData.get("password"),
+    agreedToTerms: formData.get("agreedToTerms") === "on",
   });
 
   if (!parsed.success) {

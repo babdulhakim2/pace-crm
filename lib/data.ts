@@ -16,6 +16,8 @@ export const OUTCOMES: Record<string, { label: string; dm: boolean; sale: boolea
   R:    { label: "Referral",                    dm: true,  sale: false, tone: "orange" },
 };
 
+export type OutcomeMap = Record<string, { label: string; dm: boolean; sale: boolean; tone: string }>;
+
 export const SERVICES: Record<string, { label: string }> = {
   GBPO: { label: "Google Business Profile" },
   BRL:  { label: "Business Reviews & Listings" },
@@ -184,14 +186,14 @@ const VISITS: Visit[] = [
 ];
 
 // Pure function: derive stage from enriched business
-export function stageOf(biz: EnrichedBusiness): string {
+export function stageOf(biz: EnrichedBusiness, outcomes: OutcomeMap): string {
   if (biz.stageOverride) return biz.stageOverride;
   const items = biz.visits.flatMap((v) => v.items.map((i) => ({ ...i, date: v.date })));
-  const dmSpoken = items.some((it) => OUTCOMES[it.out]?.dm);
-  const anySale = items.some((it) => OUTCOMES[it.out]?.sale);
+  const dmSpoken = items.some((it) => outcomes[it.out]?.dm);
+  const anySale = items.some((it) => outcomes[it.out]?.sale);
   if (anySale) return "won";
   if (!dmSpoken) return "cold";
-  const allNi = items.every((it) => !OUTCOMES[it.out]?.dm || it.out === "NI" || it.out === "BC" || it.out === "BCD");
+  const allNi = items.every((it) => !outcomes[it.out]?.dm || outcomes[it.out]?.tone === "danger" || outcomes[it.out]?.tone === "muted");
   if (allNi) return "lost";
   return "active";
 }
@@ -225,7 +227,7 @@ export function enrichBusinesses(
     });
     b.serviceCount = seenSvc.size;
     if (overrides?.[b.id]) b.stageOverride = overrides[b.id];
-    b.stage = stageOf(b);
+    b.stage = stageOf(b, outcomes);
   });
   return byBiz;
 }
@@ -235,10 +237,10 @@ export const SEED_BUSINESSES = BUSINESSES;
 export const SEED_VISITS = VISITS;
 
 // Stats helpers
-export function isSale(out: string) { return OUTCOMES[out] && OUTCOMES[out].sale; }
-export function isDM(out: string) { return OUTCOMES[out] && OUTCOMES[out].dm; }
+export function isSale(out: string, outcomes: OutcomeMap) { return !!outcomes[out]?.sale; }
+export function isDM(out: string, outcomes: OutcomeMap) { return !!outcomes[out]?.dm; }
 export function isPitch(_out: string) { return true; }
-export function isQuoted(out: string) { return ["IMPQ", "MAPQ"].includes(out); }
+export function isQuoted(out: string, outcomes: OutcomeMap) { return !!outcomes[out]?.label?.toLowerCase().includes("quote"); }
 
 export function formatAgo(iso: string) {
   const then = new Date(iso);

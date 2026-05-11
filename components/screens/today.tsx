@@ -20,29 +20,33 @@ export function TodayScreen({ openBiz, freshVisitIds }: {
   const itemsWk = items.filter((it) => new Date(it.date) >= weekAgo);
   const totalContacts = itemsWk.length;
   const bizSet = new Set(itemsWk.map((it) => it.bizId));
-  const dms = itemsWk.filter((it) => isDM(it.out)).length;
-  const sales = itemsWk.filter((it) => isSale(it.out)).length;
-  const callbacks14 = items.filter((it) => it.out === "CB" && (new Date().getTime() - new Date(it.date).getTime()) < 14 * 86400000).length;
+  const dms = itemsWk.filter((it) => isDM(it.out, outcomes)).length;
+  const sales = itemsWk.filter((it) => isSale(it.out, outcomes)).length;
+  const callbacks14 = items.filter((it) => outcomes[it.out]?.tone === "warning" && (new Date().getTime() - new Date(it.date).getTime()) < 14 * 86400000).length;
   const hitRate = totalContacts ? Math.round((dms / totalContacts) * 100) : 0;
   const convRate = dms ? Math.round((sales / dms) * 100) : 0;
 
   const twoWeeks = new Date(now); twoWeeks.setDate(twoWeeks.getDate() - 14);
   const itemsLastWk = items.filter((it) => new Date(it.date) >= twoWeeks && new Date(it.date) < weekAgo);
-  const lastDms = itemsLastWk.filter((it) => isDM(it.out)).length;
-  const lastSales = itemsLastWk.filter((it) => isSale(it.out)).length;
+  const lastDms = itemsLastWk.filter((it) => isDM(it.out, outcomes)).length;
+  const lastSales = itemsLastWk.filter((it) => isSale(it.out, outcomes)).length;
   const lastConv = lastDms ? Math.round((lastSales / lastDms) * 100) : 0;
   const convDelta = convRate - lastConv;
 
   const recent = allVisitsSorted.slice(0, 8);
 
-  const meetingOutcomes = new Set(["MA", "IM", "MAPQ", "IMPQ", "MAS"]);
+  const meetingOutcomes = new Set(
+    Object.entries(outcomes)
+      .filter(([, o]) => o.dm && o.tone !== "danger" && o.tone !== "muted")
+      .map(([code]) => code)
+  );
   const meetingBusinesses = Object.values(businessesById)
     .filter((b) => b.lastVisit && b.lastVisit.items.some((it) => meetingOutcomes.has(it.out)))
     .sort((a, b) => new Date(b.lastVisit!.date).getTime() - new Date(a.lastVisit!.date).getTime())
     .slice(0, 4);
 
   const cbBusinesses = Object.values(businessesById)
-    .filter((b) => b.lastVisit && b.lastVisit.items.some((it) => it.out === "CB"))
+    .filter((b) => b.lastVisit && b.lastVisit.items.some((it) => outcomes[it.out]?.tone === "warning"))
     .sort((a, b) => new Date(b.lastVisit!.date).getTime() - new Date(a.lastVisit!.date).getTime())
     .slice(0, 4);
 

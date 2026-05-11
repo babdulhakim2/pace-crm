@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { usePace } from "@/lib/store";
-import { isDM, isSale, isQuoted } from "@/lib/data";
+import { isDM, isSale, isQuoted, type OutcomeMap } from "@/lib/data";
 import { Stat } from "@/components/ui";
 import { IconFunnel, IconLocation } from "@/components/icons";
 import {
@@ -21,20 +21,10 @@ const CHART_COLORS = {
   orange: "#C8651A",
 };
 
-const OUTCOME_COLORS: Record<string, string> = {
-  CB: CHART_COLORS.warning,
-  IM: CHART_COLORS.accent,
-  IMPQ: CHART_COLORS.accent,
-  MA: CHART_COLORS.purple,
-  MAPQ: CHART_COLORS.purple,
-  MAS: CHART_COLORS.success,
-  IS: CHART_COLORS.success,
-  NI: CHART_COLORS.danger,
-  BC: CHART_COLORS.muted,
-  BCD: CHART_COLORS.muted,
-  NDM: CHART_COLORS.muted,
-  R: CHART_COLORS.orange,
-};
+function outcomeColor(code: string, outcomes: OutcomeMap): string {
+  const tone = outcomes[code]?.tone;
+  return CHART_COLORS[tone as keyof typeof CHART_COLORS] || CHART_COLORS.muted;
+}
 
 export function StatsScreen() {
   const { visits, services, areas, businessesById, outcomes } = usePace();
@@ -42,10 +32,10 @@ export function StatsScreen() {
 
   const items = visits.flatMap((v) => v.items.map((it) => ({ ...it, date: v.date, bizId: v.bizId })));
   const totalContacts = items.length;
-  const totalDms = items.filter((it) => isDM(it.out)).length;
-  const totalQuotes = items.filter((it) => isQuoted(it.out)).length;
-  const totalSales = items.filter((it) => isSale(it.out)).length;
-  const referrals = items.filter((it) => it.out === "R").length;
+  const totalDms = items.filter((it) => isDM(it.out, outcomes)).length;
+  const totalQuotes = items.filter((it) => isQuoted(it.out, outcomes)).length;
+  const totalSales = items.filter((it) => isSale(it.out, outcomes)).length;
+  const referrals = items.filter((it) => outcomes[it.out]?.tone === "orange").length;
 
   const dmHitRate = totalContacts ? Math.round((totalDms / totalContacts) * 100) : 0;
   const convRate = totalDms ? Math.round((totalSales / totalDms) * 100) : 0;
@@ -58,8 +48,8 @@ export function StatsScreen() {
     const biz = businessesById[it.bizId];
     if (!biz || !byArea[biz.area]) return;
     byArea[biz.area].total++;
-    if (isDM(it.out)) byArea[biz.area].dm++;
-    if (isSale(it.out)) byArea[biz.area].sales++;
+    if (isDM(it.out, outcomes)) byArea[biz.area].dm++;
+    if (isSale(it.out, outcomes)) byArea[biz.area].sales++;
   });
   const areasSorted = Object.values(byArea).sort((a, b) => b.dm - a.dm);
   const maxArea = Math.max(...areasSorted.map((a) => a.total), 1);
@@ -77,8 +67,8 @@ export function StatsScreen() {
     const w = weeks.find((wk) => d >= wk.start && d < wk.end);
     if (!w) return;
     w.contacts++;
-    if (isDM(it.out)) w.dm++;
-    if (isSale(it.out)) w.sales++;
+    if (isDM(it.out, outcomes)) w.dm++;
+    if (isSale(it.out, outcomes)) w.sales++;
   });
   weeks.forEach((w) => { w.conv = w.dm ? Math.round((w.sales / w.dm) * 100) : 0; });
   const maxWeek = Math.max(...weeks.map((w) => w.dm + w.sales), 1);
@@ -89,8 +79,8 @@ export function StatsScreen() {
   items.forEach((it) => {
     if (!bySvc[it.svc]) bySvc[it.svc] = { svc: it.svc, label: it.svc, pitches: 0, dm: 0, sales: 0 };
     bySvc[it.svc].pitches++;
-    if (isDM(it.out)) bySvc[it.svc].dm++;
-    if (isSale(it.out)) bySvc[it.svc].sales++;
+    if (isDM(it.out, outcomes)) bySvc[it.svc].dm++;
+    if (isSale(it.out, outcomes)) bySvc[it.svc].sales++;
   });
   const svcSorted = Object.values(bySvc).sort((a, b) => b.pitches - a.pitches);
   const maxSvc = Math.max(...svcSorted.map((s) => s.pitches), 1);
@@ -231,7 +221,7 @@ export function StatsScreen() {
                          cx="50%" cy="50%" innerRadius={50} outerRadius={85}
                          paddingAngle={2} stroke="none">
                       {donutData.map((entry) => (
-                        <Cell key={entry.code} fill={OUTCOME_COLORS[entry.code] || CHART_COLORS.muted} />
+                        <Cell key={entry.code} fill={outcomeColor(entry.code, outcomes)} />
                       ))}
                     </Pie>
                     <Tooltip />
@@ -240,7 +230,7 @@ export function StatsScreen() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 8 }}>
                   {donutData.slice(0, 6).map((d) => (
                     <span key={d.code} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}>
-                      <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: OUTCOME_COLORS[d.code] || CHART_COLORS.muted }} />
+                      <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: outcomeColor(d.code, outcomes) }} />
                       {d.code} ({d.value})
                     </span>
                   ))}

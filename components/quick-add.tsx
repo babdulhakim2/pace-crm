@@ -7,8 +7,9 @@ import { IconPlus, IconCheck, IconClose } from "@/components/icons";
 export function QuickAdd({ bizId, onDone }: { bizId: string; onDone?: () => void }) {
   const { addVisit, services, outcomes } = usePace();
   const [open, setOpen] = React.useState(false);
+  const defaultOut = Object.keys(outcomes).find((c) => outcomes[c]?.tone === "warning") || Object.keys(outcomes)[0] || "";
   const [svc, setSvc] = React.useState(Object.keys(services)[0] || "GBPO");
-  const [out, setOut] = React.useState("CB");
+  const [out, setOut] = React.useState(defaultOut);
   const [notes, setNotes] = React.useState("");
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -36,7 +37,7 @@ export function QuickAdd({ bizId, onDone }: { bizId: string; onDone?: () => void
     setOpen(false);
     setNotes("");
     setSvc(Object.keys(services)[0] || "GBPO");
-    setOut("CB");
+    setOut(defaultOut);
     onDone?.();
   };
 

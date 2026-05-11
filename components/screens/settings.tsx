@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { usePace } from "@/lib/store";
+import { deleteAccountAction } from "@/app/actions/account";
 import { IconUser, IconPlus, IconTrash, IconCheck, IconClose } from "@/components/icons";
 
 const TONE_OPTIONS = ["muted", "accent", "success", "danger", "warning", "purple", "orange"];
@@ -19,6 +20,10 @@ export function SettingsScreen() {
   const [editLabel, setEditLabel] = React.useState("");
   const [showConfirmReset, setShowConfirmReset] = React.useState(false);
   const [showConfirmClear, setShowConfirmClear] = React.useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = React.useState(false);
+  const [deletePassword, setDeletePassword] = React.useState("");
+  const [deleteError, setDeleteError] = React.useState("");
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
 
   // Confirm-delete state
   const [confirmDeleteSvc, setConfirmDeleteSvc] = React.useState<string | null>(null);
@@ -402,6 +407,60 @@ export function SettingsScreen() {
           ) : (
             <button className="btn secondary" onClick={() => setShowConfirmClear(true)}>
               Clear all data
+            </button>
+          )}
+        </div>
+
+        <hr className="div" />
+
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Delete account</div>
+          <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Permanently delete your account and all associated data. This cannot be undone.
+          </p>
+          {showDeleteAccount ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 320 }}>
+              <input
+                type="password"
+                className="input"
+                placeholder="Enter your password to confirm"
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(""); }}
+              />
+              {deleteError && (
+                <p style={{ fontSize: 12, color: "var(--danger)" }}>{deleteError}</p>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn danger sm"
+                  disabled={!deletePassword || deleteLoading}
+                  onClick={async () => {
+                    setDeleteLoading(true);
+                    setDeleteError("");
+                    try {
+                      const result = await deleteAccountAction(deletePassword);
+                      if (result?.error) {
+                        setDeleteError(result.error);
+                        setDeleteLoading(false);
+                      }
+                    } catch {
+                      // redirect throws — this is expected on success
+                    }
+                  }}
+                >
+                  {deleteLoading ? "Deleting..." : "Delete my account"}
+                </button>
+                <button
+                  className="btn ghost sm"
+                  onClick={() => { setShowDeleteAccount(false); setDeletePassword(""); setDeleteError(""); }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn danger" onClick={() => setShowDeleteAccount(true)}>
+              Delete account
             </button>
           )}
         </div>
