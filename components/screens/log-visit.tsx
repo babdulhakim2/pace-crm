@@ -100,20 +100,19 @@ async function callExtractAPI(
   services: Record<string, { label: string }>,
   outcomes: OutcomeMap,
   areas: string[],
-): Promise<Extraction | null> {
-  try {
-    const res = await fetch("/api/extract", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, businesses, services, outcomes, areas }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.business && data.items) return data as Extraction;
-    return null;
-  } catch {
-    return null;
+): Promise<Extraction> {
+  const res = await fetch("/api/extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, businesses, services, outcomes, areas }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Extraction failed (${res.status})`);
   }
+  const data = await res.json();
+  if (!data.business && !data.items) throw new Error("AI returned an incomplete extraction. Try again.");
+  return data as Extraction;
 }
 
 export function LogVisitScreen() {
@@ -125,6 +124,7 @@ export function LogVisitScreen() {
   const [recSec, setRecSec] = React.useState(0);
   const [textInput, setTextInput] = React.useState("");
   const [extraction, setExtraction] = React.useState<Extraction | null>(null);
+  const [extractError, setExtractError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (state !== "recording") return;
@@ -146,19 +146,17 @@ export function LogVisitScreen() {
     }));
 
     (async () => {
-      // Try real AI extraction first
-      const aiResult = await callExtractAPI(sourceText, bizList, services, outcomes, areas);
-      if (cancelled) return;
-      if (aiResult) {
-        setExtraction(aiResult);
+      try {
+        const result = await callExtractAPI(sourceText, bizList, services, outcomes, areas);
+        if (cancelled) return;
+        setExtraction(result);
+        setExtractError(null);
         setState("review");
-        return;
+      } catch (err) {
+        if (cancelled) return;
+        setExtractError(err instanceof Error ? err.message : "Extraction failed. Try again.");
+        setState("idle");
       }
-      // Fall back to regex extraction
-      const extracted = tryExtract(sourceText, bizList, areas, services, outcomes);
-      if (cancelled) return;
-      setExtraction(extracted || { ...DEMO_EXTRACTION });
-      setState("review");
     })();
 
     return () => { cancelled = true; };
@@ -253,6 +251,13 @@ export function LogVisitScreen() {
       {speech.error && (
         <div className="card" style={{ marginBottom: 12, padding: 12, background: "var(--danger-bg)", border: "1px solid var(--danger)", borderRadius: 8, fontSize: 13, color: "var(--danger)" }}>
           {speech.error}
+        </div>
+      )}
+
+      {extractError && (
+        <div className="card" style={{ marginBottom: 12, padding: 12, background: "var(--danger-bg)", border: "1px solid var(--danger)", borderRadius: 8, fontSize: 13, color: "var(--danger)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>AI extraction failed: {extractError}</span>
+          <button className="btn ghost sm" style={{ color: "var(--danger)", fontSize: 11 }} onClick={() => setExtractError(null)}>Dismiss</button>
         </div>
       )}
 
@@ -372,6 +377,7 @@ export function LogVisitScreen() {
           via={mode}
           areas={areas}
           outcomes={outcomes}
+          businesses={Object.values(businessesById).map((b) => ({ id: b.id, name: b.name, area: b.area, contact: b.contact, role: b.role }))}
         />
       )}
 
@@ -388,7 +394,87 @@ export function LogVisitScreen() {
 
 type OutcomeMap = Record<string, { label: string; dm: boolean; sale: boolean; tone: string }>;
 
-function ExtractedCard({ extraction, onChange, onItemChange, onItemRemove, onItemAdd, state, onDiscard, onSave, onLogAnother, transcript, via, areas, outcomes }: {
+function BusinessCombobox({ value, onChange, onSelect, businesses }: {
+  value: string;
+  onChange: (name: string) => void;
+  onSelect: (biz: { name: string; area: string; contact: string; role: string }) => void;
+  businesses: { id: string; name: string; area: string; contact: string; role: string }[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const lc = (query || value).toLowerCase();
+  const filtered = lc
+    ? businesses.filter((b) => b.name.toLowerCase().includes(lc))
+    : businesses;
+  const show = filtered.slice(0, 8);
+  const exactMatch = businesses.some((b) => b.name.toLowerCase() === value.toLowerCase());
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <input
+        className="input"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Search or type new..."
+      />
+      {open && (show.length > 0 || value.trim()) && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: 8, boxShadow: "var(--shadow-2)", zIndex: 50,
+          maxHeight: 220, overflowY: "auto",
+        }}>
+          {show.map((b) => (
+            <button
+              key={b.id}
+              style={{
+                display: "flex", flexDirection: "column", gap: 1, width: "100%",
+                padding: "8px 12px", border: 0, background: b.name === value ? "var(--accent-bg)" : "transparent",
+                cursor: "pointer", font: "inherit", fontSize: 12.5, textAlign: "left", color: "var(--text)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = b.name === value ? "var(--accent-bg)" : "transparent")}
+              onClick={() => {
+                onSelect({ name: b.name, area: b.area, contact: b.contact, role: b.role });
+                setOpen(false);
+                setQuery("");
+              }}
+            >
+              <span style={{ fontWeight: 500 }}>{b.name}</span>
+              <span style={{ fontSize: 11, color: "var(--text-3)" }}>{b.area} · {b.contact}</span>
+            </button>
+          ))}
+          {value.trim() && !exactMatch && (
+            <div style={{
+              padding: "8px 12px", fontSize: 11.5, color: "var(--text-3)",
+              borderTop: show.length > 0 ? "1px solid var(--border)" : undefined,
+            }}>
+              <strong>&ldquo;{value}&rdquo;</strong> will be added as a new business
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExtractedCard({ extraction, onChange, onItemChange, onItemRemove, onItemAdd, state, onDiscard, onSave, onLogAnother, transcript, via, areas, outcomes, businesses }: {
   extraction: Extraction;
   onChange: (patch: Partial<Extraction>) => void;
   onItemChange: (idx: number, patch: Partial<{ svc: string; out: string }>) => void;
@@ -402,6 +488,7 @@ function ExtractedCard({ extraction, onChange, onItemChange, onItemRemove, onIte
   via: string;
   areas: string[];
   outcomes: OutcomeMap;
+  businesses: { id: string; name: string; area: string; contact: string; role: string }[];
 }) {
   return (
     <div className="card" style={{ animation: "viewIn 240ms ease-out" }}>
@@ -426,8 +513,12 @@ function ExtractedCard({ extraction, onChange, onItemChange, onItemRemove, onIte
       <div className="field-grid">
         <div>
           <label className="label">Business</label>
-          <input className="input" value={extraction.business}
-                 onChange={(e) => onChange({ business: e.target.value })} />
+          <BusinessCombobox
+            value={extraction.business}
+            onChange={(name) => onChange({ business: name })}
+            onSelect={(biz) => onChange({ business: biz.name, area: biz.area, contact: biz.contact, role: biz.role })}
+            businesses={businesses}
+          />
         </div>
         <div>
           <label className="label">Area</label>

@@ -9,17 +9,16 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  useDraggable,
+  useDroppable,
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { usePace } from "@/lib/store";
 import { formatAgo, type EnrichedBusiness } from "@/lib/data";
 import { SvcOutcomePill, STAGE_META } from "@/components/ui";
 import { QuickAdd } from "@/components/quick-add";
-import { IconClock, IconArrowRight, IconCheck, IconClose } from "@/components/icons";
-import { useDroppable } from "@dnd-kit/core";
+import { IconClock, IconArrowRight, IconCheck, IconClose, IconTrash } from "@/components/icons";
 
 function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
   const { isOver, setNodeRef } = useDroppable({ id });
@@ -81,20 +80,21 @@ function StageMoveButtons({ bizId, currentStage, onMove }: {
   );
 }
 
-function SortableCard({ biz, openBiz, outcomes, onMove }: {
+function DraggableCard({ biz, openBiz, outcomes, onMove, onDelete }: {
   biz: EnrichedBusiness;
   openBiz: (id: string) => void;
   outcomes: OutcomeMap;
   onMove: (bizId: string, stage: string) => void;
+  onDelete: (bizId: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: biz.id,
     data: { stage: biz.stage },
   });
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
   };
 
   const lv = biz.lastVisit;
@@ -106,30 +106,58 @@ function SortableCard({ biz, openBiz, outcomes, onMove }: {
       {...attributes}
       className={"kan-card" + (isDragging ? " dragging" : "")}
     >
-      {/* Drag handle area */}
-      <div
-        {...listeners}
-        style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "grab", touchAction: "none" }}
-      >
-        <div className="biz" onClick={() => openBiz(biz.id)} style={{ cursor: "pointer" }}>{biz.name}</div>
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <StageMoveButtons bizId={biz.id} currentStage={biz.stage} onMove={onMove} />
-          <QuickAdd bizId={biz.id} />
+      {confirmDelete ? (
+        <div style={{ padding: "4px 0" }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 8 }}>
+            Delete <strong>{biz.name}</strong> and all its visits?
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="btn danger sm" style={{ fontSize: 11 }}
+              onClick={() => onDelete(biz.id)}>
+              Yes, delete
+            </button>
+            <button className="btn ghost sm" style={{ fontSize: 11 }}
+              onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </button>
+          </div>
         </div>
-      </div>
-      <div className="sub" onClick={() => openBiz(biz.id)} style={{ cursor: "pointer" }}>{biz.area} · {biz.contact}</div>
-      <div className="pills" onClick={() => openBiz(biz.id)} style={{ marginTop: 2, cursor: "pointer" }}>
-        {lv && lv.items.slice(0, 3).map((it, i) => (
-          <SvcOutcomePill key={i} svc={it.svc} out={it.out} outcomes={outcomes} />
-        ))}
-        {lv && lv.items.length > 3 && (
-          <span className="pill" style={{ background: "var(--surface-2)" }}>+{lv.items.length - 3}</span>
-        )}
-      </div>
-      <div className="foot" onClick={() => openBiz(biz.id)} style={{ cursor: "pointer" }}>
-        <span>{lv ? formatAgo(lv.date) : "\u2014"}</span>
-        <span>{biz.contactCount} contact{biz.contactCount !== 1 ? "s" : ""}</span>
-      </div>
+      ) : (
+        <>
+          {/* Drag handle area */}
+          <div
+            {...listeners}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "grab", touchAction: "none" }}
+          >
+            <div className="biz" onClick={() => openBiz(biz.id)} style={{ cursor: "pointer" }}>{biz.name}</div>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <StageMoveButtons bizId={biz.id} currentStage={biz.stage} onMove={onMove} />
+              <QuickAdd bizId={biz.id} />
+              <button
+                className="icon-btn"
+                title="Delete business"
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                style={{ color: "var(--text-3)" }}
+              >
+                <IconTrash size={13} />
+              </button>
+            </div>
+          </div>
+          <div className="sub" onClick={() => openBiz(biz.id)} style={{ cursor: "pointer" }}>{biz.area} · {biz.contact}</div>
+          <div className="pills" onClick={() => openBiz(biz.id)} style={{ marginTop: 2, cursor: "pointer" }}>
+            {lv && lv.items.slice(0, 3).map((it, i) => (
+              <SvcOutcomePill key={i} svc={it.svc} out={it.out} outcomes={outcomes} />
+            ))}
+            {lv && lv.items.length > 3 && (
+              <span className="pill" style={{ background: "var(--surface-2)" }}>+{lv.items.length - 3}</span>
+            )}
+          </div>
+          <div className="foot" onClick={() => openBiz(biz.id)} style={{ cursor: "pointer" }}>
+            <span>{lv ? formatAgo(lv.date) : "\u2014"}</span>
+            <span>{biz.contactCount} contact{biz.contactCount !== 1 ? "s" : ""}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -154,7 +182,7 @@ function OverlayCard({ biz, outcomes }: { biz: EnrichedBusiness; outcomes: Outco
 }
 
 export function PipelineScreen({ openBiz }: { openBiz: (id: string) => void }) {
-  const { businessesById, updateBusinessStage, outcomes } = usePace();
+  const { businessesById, updateBusinessStage, deleteBusiness, outcomes } = usePace();
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
   const stages = [
@@ -191,16 +219,9 @@ export function PipelineScreen({ openBiz }: { openBiz: (id: string) => void }) {
     if (!over) return;
 
     const bizId = active.id as string;
-    let targetStage: string | null = null;
+    const targetStage = over.id as string;
 
-    if (["cold", "active", "won", "lost"].includes(over.id as string)) {
-      targetStage = over.id as string;
-    } else {
-      const overBiz = businessesById[over.id as string];
-      if (overBiz) targetStage = overBiz.stage;
-    }
-
-    if (targetStage && businessesById[bizId]?.stage !== targetStage) {
+    if (STAGES.includes(targetStage as typeof STAGES[number]) && businessesById[bizId]?.stage !== targetStage) {
       updateBusinessStage(bizId, targetStage);
     }
   };
@@ -244,13 +265,11 @@ export function PipelineScreen({ openBiz }: { openBiz: (id: string) => void }) {
                     <span className="count">{items.length}</span>
                   </Link>
                 </div>
-                <SortableContext items={items.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-                  {items.length === 0 ? (
-                    <div className="kan-empty">{s.desc}</div>
-                  ) : items.map((b) => (
-                    <SortableCard key={b.id} biz={b} openBiz={openBiz} outcomes={outcomes} onMove={handleMove} />
-                  ))}
-                </SortableContext>
+                {items.length === 0 ? (
+                  <div className="kan-empty">{s.desc}</div>
+                ) : items.map((b) => (
+                  <DraggableCard key={b.id} biz={b} openBiz={openBiz} outcomes={outcomes} onMove={handleMove} onDelete={deleteBusiness} />
+                ))}
               </DroppableColumn>
             );
           })}

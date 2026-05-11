@@ -14,6 +14,7 @@ const serverActions = {
   addVisit: () => import("@/app/actions/visits").then((m) => m.addVisitAction),
   addBusiness: () => import("@/app/actions/businesses").then((m) => m.addBusinessAction),
   updateBusiness: () => import("@/app/actions/businesses").then((m) => m.updateBusinessAction),
+  deleteBusiness: () => import("@/app/actions/businesses").then((m) => m.deleteBusinessAction),
   updateBusinessStage: () => import("@/app/actions/businesses").then((m) => m.updateBusinessStageAction),
   addService: () => import("@/app/actions/config").then((m) => m.addServiceAction),
   updateService: () => import("@/app/actions/config").then((m) => m.updateServiceAction),
@@ -56,6 +57,7 @@ interface PaceCtx extends PaceState {
   clearAll: () => void;
   addBusiness: (b: Business) => void;
   updateBusiness: (b: Business) => void;
+  deleteBusiness: (bizId: string) => void;
 }
 
 const PaceContext = React.createContext<PaceCtx | null>(null);
@@ -331,6 +333,28 @@ export function PaceProvider({
     [optimistic],
   );
 
+  const deleteBusiness = React.useCallback(
+    (bizId: string) => {
+      optimistic(
+        (s) => ({
+          ...s,
+          businesses: s.businesses.filter((b) => b.id !== bizId),
+          visits: s.visits.filter((v) => v.bizId !== bizId),
+          stageOverrides: (() => {
+            const next = { ...s.stageOverrides };
+            delete next[bizId];
+            return next;
+          })(),
+        }),
+        async () => {
+          const fn = await serverActions.deleteBusiness();
+          await fn(bizId);
+        },
+      );
+    },
+    [optimistic],
+  );
+
   const ctx: PaceCtx = {
     ...state,
     businessesById,
@@ -350,6 +374,7 @@ export function PaceProvider({
     clearAll,
     addBusiness,
     updateBusiness,
+    deleteBusiness,
   };
 
   return <PaceContext.Provider value={ctx}>{children}</PaceContext.Provider>;

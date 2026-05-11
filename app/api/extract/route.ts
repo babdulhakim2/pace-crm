@@ -1,7 +1,7 @@
 import { getSession } from "@/lib/auth/session";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "google/gemini-2.5-flash-preview";
+const MODEL = "google/gemini-2.5-flash";
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -36,20 +36,29 @@ export async function POST(request: Request) {
 
   const areaList = (areas || []).join(", ");
 
+  const businessNames = (businesses || []).map((b: { name: string }) => b.name);
+
   const systemPrompt = `You are a sales visit extraction assistant. Extract structured visit data from a salesperson's notes.
 
-Known businesses:
+Known businesses (use EXACT name if the text refers to one of these):
 ${businessList || "(none)"}
 
-Service codes:
+All business names for matching: ${businessNames.length > 0 ? JSON.stringify(businessNames) : "(none)"}
+
+Service codes (use EXACT code):
 ${serviceList || "(none)"}
 
-Outcome codes:
+Outcome codes (use EXACT code):
 ${outcomeList || "(none)"}
 
-Known areas: ${areaList || "(none)"}
+Known areas (use EXACT name): ${areaList || "(none)"}
 
-Extract the visit details and call the log_visit function. Match businesses, services, outcomes, and areas to the known values when possible. If a service or outcome is mentioned but doesn't match a known code, use the closest match. For notes, summarize the key points from the text. For followUp, extract any follow-up actions mentioned.`;
+IMPORTANT RULES:
+- For the "business" field: if the salesperson mentions a business that matches or closely resembles one from the known list, you MUST return the EXACT name from the list (e.g. if they say "went to Tony's" and "Tony's Barbers" is in the list, return "Tony's Barbers"). If no match, return the name as stated.
+- For "svc" and "out" fields: ONLY use codes from the lists above. Never invent codes.
+- For "area": match to a known area when possible.
+- For "notes": summarize the key points from the text.
+- For "followUp": extract any follow-up actions or next steps mentioned.`;
 
   try {
     const res = await fetch(OPENROUTER_URL, {
