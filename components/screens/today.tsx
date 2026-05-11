@@ -6,6 +6,7 @@ import { isDM, isSale, formatAgo, todayLabel } from "@/lib/data";
 import { SvcOutcomePill, Stat } from "@/components/ui";
 import { QuickAdd } from "@/components/quick-add";
 import { IconClipboard, IconUser, IconCheck, IconPhone, IconCalendar, IconLocation, IconMic, IconPencil, IconArrowRight } from "@/components/icons";
+import { ScheduleCallButton } from "@/components/schedule-call";
 
 export function TodayScreen({ openBiz, freshVisitIds }: {
   openBiz: (id: string) => void;
@@ -145,6 +146,7 @@ export function TodayScreen({ openBiz, freshVisitIds }: {
                     <div className="biz">{b.name}</div>
                     <div className="meta">{b.area}</div>
                   </div>
+                  <ScheduleCallButton bizName={b.name} contact={b.contact} area={b.area} />
                   <div className="right">{formatAgo(b.lastVisit!.date)}</div>
                 </div>
               ))}
@@ -169,6 +171,7 @@ export function TodayScreen({ openBiz, freshVisitIds }: {
                     <div className="biz">{b.name}</div>
                     <div className="meta">{b.area} · {b.contact}</div>
                   </div>
+                  <ScheduleCallButton bizName={b.name} contact={b.contact} area={b.area} />
                   <div className="right">{formatAgo(b.lastVisit!.date)}</div>
                 </div>
               ))}

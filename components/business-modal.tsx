@@ -4,6 +4,7 @@ import { usePace } from "@/lib/store";
 import { formatAgo, shortDate, isSale } from "@/lib/data";
 import { SvcOutcomePill, StageTag, Stat, STAGE_META } from "@/components/ui";
 import { QuickAdd } from "@/components/quick-add";
+import { ScheduleCall } from "@/components/schedule-call";
 import { IconBuilding, IconClose, IconMic, IconPencil, IconCheck } from "@/components/icons";
 
 export function BusinessModal({ bizId, onClose }: { bizId: string | null; onClose: () => void }) {
@@ -102,7 +103,6 @@ export function BusinessModal({ bizId, onClose }: { bizId: string | null; onClos
             </>
           ) : (
             <>
-              {/* Stage selector */}
               <select
                 className="select"
                 value={biz.stage}
@@ -129,6 +129,11 @@ export function BusinessModal({ bizId, onClose }: { bizId: string | null; onClos
             <Stat label="Last contact"
                   value={biz.lastVisit ? formatAgo(biz.lastVisit.date).replace(" ago", "") : "\u2014"}
                   sub={biz.lastVisit ? `via ${biz.lastVisit.via}` : ""} />
+          </div>
+
+          {/* Schedule call */}
+          <div style={{ marginBottom: 18 }}>
+            <ScheduleCall bizName={biz.name} contact={biz.contact} area={biz.area} />
           </div>
 
           <div style={{ marginBottom: 18 }}>
