@@ -1,7 +1,7 @@
 "use server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { businesses, stageOverrides, visits } from "@/db/schema";
+import { businesses, stageOverrides, visits, visitItems } from "@/db/schema";
 import { requireAuth } from "@/lib/auth/guards";
 import { addBusinessSchema, updateStageSchema, updateBusinessSchema } from "@/lib/validations";
 
@@ -55,7 +55,21 @@ export async function updateBusinessAction(data: {
 export async function deleteBusinessAction(bizId: string) {
   const { userId } = await requireAuth();
 
-  // Delete visits and visit items for this business
+  // Delete visit items for all visits belonging to this business
+  const bizVisits = await db
+    .select({ id: visits.id })
+    .from(visits)
+    .where(and(eq(visits.userId, userId), eq(visits.bizId, bizId)));
+
+  if (bizVisits.length > 0) {
+    for (const v of bizVisits) {
+      await db
+        .delete(visitItems)
+        .where(and(eq(visitItems.userId, userId), eq(visitItems.visitId, v.id)));
+    }
+  }
+
+  // Delete visits
   await db
     .delete(visits)
     .where(and(eq(visits.userId, userId), eq(visits.bizId, bizId)));

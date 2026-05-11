@@ -2,16 +2,79 @@
 import React from "react";
 import { useSearchParams } from "next/navigation";
 import { usePace } from "@/lib/store";
-import { isDM, isSale, formatAgo, shortDate } from "@/lib/data";
+import { isDM, isSale, formatAgo } from "@/lib/data";
 import { SvcOutcomePill, StageTag, STAGE_META } from "@/components/ui";
 import { useUI } from "@/app/(app)/client-layout";
 import { QuickAdd } from "@/components/quick-add";
-import { IconSearch, IconClose, IconSheet, IconBuilding } from "@/components/icons";
+import { IconSearch, IconClose, IconSheet, IconBuilding, IconPlus, IconTrash } from "@/components/icons";
 import { buildSalesTrackerWorkbook } from "@/lib/export";
 import * as XLSX from "xlsx";
 
+function AddBusinessForm({ onClose }: { onClose: () => void }) {
+  const { areas, addBusiness } = usePace();
+  const [name, setName] = React.useState("");
+  const [type, setType] = React.useState("Business");
+  const [area, setArea] = React.useState(areas[0] || "");
+  const [contact, setContact] = React.useState("");
+  const [role, setRole] = React.useState("Owner");
+
+  const canSave = name.trim() && contact.trim() && area;
+
+  const handleSave = () => {
+    if (!canSave) return;
+    addBusiness({
+      id: `b-${Date.now()}`,
+      name: name.trim(),
+      type: type.trim() || "Business",
+      area,
+      contact: contact.trim(),
+      role: role.trim() || "Owner",
+    });
+    onClose();
+  };
+
+  return (
+    <div className="card" style={{ padding: 16, marginBottom: 14, border: "1px solid var(--accent)", background: "var(--accent-bg)" }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Add new business</div>
+      <div className="field-grid">
+        <div>
+          <label className="label">Name *</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)}
+                 placeholder="e.g. Tony's Barbers" autoFocus />
+        </div>
+        <div>
+          <label className="label">Type</label>
+          <input className="input" value={type} onChange={(e) => setType(e.target.value)}
+                 placeholder="e.g. Restaurant, Salon" />
+        </div>
+        <div>
+          <label className="label">Area *</label>
+          <select className="select" value={area} onChange={(e) => setArea(e.target.value)}>
+            {areas.length === 0 && <option value="">No areas configured</option>}
+            {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Contact *</label>
+          <input className="input" value={contact} onChange={(e) => setContact(e.target.value)}
+                 placeholder="e.g. Tony Smith" />
+        </div>
+        <div>
+          <label className="label">Role</label>
+          <input className="input" value={role} onChange={(e) => setRole(e.target.value)}
+                 placeholder="e.g. Owner, Manager" />
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+        <button className="btn ghost sm" onClick={onClose}>Cancel</button>
+        <button className="btn accent sm" onClick={handleSave} disabled={!canSave}>Add business</button>
+      </div>
+    </div>
+  );
+}
+
 export function BusinessListScreen() {
-  const { visits, services, areas, businessesById, allVisitsSorted, outcomes } = usePace();
+  const { visits, services, areas, businessesById, allVisitsSorted, outcomes, deleteBusiness } = usePace();
   const { openBiz } = useUI();
   const searchParams = useSearchParams();
 
@@ -20,6 +83,8 @@ export function BusinessListScreen() {
 
   const [q, setQ] = React.useState("");
   const [stageFilter, setStageFilter] = React.useState(stageParam || "all");
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<string | null>(null);
 
   // Compute week items for filter logic
   const now = new Date();
@@ -110,6 +175,11 @@ export function BusinessListScreen() {
     XLSX.writeFile(wb, `pace-export-${today}.xlsx`);
   };
 
+  const handleDelete = (bizId: string) => {
+    deleteBusiness(bizId);
+    setDeleteConfirm(null);
+  };
+
   const hasFilters = q || stageFilter !== "all" || filterParam;
 
   return (
@@ -120,11 +190,16 @@ export function BusinessListScreen() {
           <p className="view-sub">{filterLabel} · {allBiz.length} result{allBiz.length === 1 ? "" : "s"}</p>
         </div>
         <div className="view-h-actions">
+          <button className="btn secondary sm" onClick={() => setShowAdd((v) => !v)}>
+            <IconPlus size={13} /> Add business
+          </button>
           <button className="btn accent" onClick={downloadXlsx}>
             <IconSheet size={14} /> Export Excel
           </button>
         </div>
       </div>
+
+      {showAdd && <AddBusinessForm onClose={() => setShowAdd(false)} />}
 
       <div className="card" style={{ padding: 14, marginBottom: 14 }}>
         <div className="filter-bar">
@@ -165,7 +240,7 @@ export function BusinessListScreen() {
                   <th style={{ width: 70 }} className="num">Contacts</th>
                   <th style={{ width: 100 }}>Last Visit</th>
                   <th>Services Pitched</th>
-                  <th style={{ width: 28 }}></th>
+                  <th style={{ width: 60 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -197,7 +272,32 @@ export function BusinessListScreen() {
                         )}
                       </div>
                     </td>
-                    <td><QuickAdd bizId={b.id} /></td>
+                    <td>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+                        <QuickAdd bizId={b.id} />
+                        {deleteConfirm === b.id ? (
+                          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                            <button className="btn danger sm" style={{ fontSize: 10, padding: "2px 6px", whiteSpace: "nowrap" }}
+                              onClick={() => handleDelete(b.id)}>
+                              Delete
+                            </button>
+                            <button className="btn ghost sm" style={{ fontSize: 10, padding: "2px 6px" }}
+                              onClick={() => setDeleteConfirm(null)}>
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="icon-btn"
+                            title="Delete business"
+                            onClick={() => setDeleteConfirm(b.id)}
+                            style={{ color: "var(--text-3)" }}
+                          >
+                            <IconTrash size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
